@@ -10,9 +10,15 @@ when the timer ends, when you reset it, or when you close the page. Time is
 never lost on a reload, a pause, or a crash. **Focus** hides everything but the
 clock (Esc to leave).
 
-**Challenges.** Next to the timer: your streak, your level, three small
-challenges for today (one changes every day) and three for the week. Writing
-earns 1 XP a minute and 20 XP each day the goal is met.
+**Challenges.** Next to the timer: your streak, your level, small challenges
+for today (one changes every day) and for the week. Writing earns 1 XP a
+minute and 20 XP for each day done.
+
+**Your own goals.** Nobody has to set a goal. Without one, a day counts as
+soon as you write for 5 minutes. If you like, set your own number of minutes
+a day, and write any goals of your own in words ("finish the intro") to tick
+off. Weekends are free: they never break a streak and nothing pushes you to
+write on them.
 
 **Lab.** The writing challenge with everyone: the lab's goal for the week, who
 reached the goal today, this week's titles (longest streak, most written, most
@@ -58,8 +64,8 @@ and the lab code.
    no password.
 3. Open the **SQL editor**, paste the whole of
    [`supabase/schema.sql`](supabase/schema.sql), and before running it edit
-   the last lines: the lab's name, the daily goal, whether weekends count, the
-   start day, and your own **join code** in place of `change-this-code`.
+   the last lines: the lab's name, the daily goal the app suggests, whether weekends
+   count, the start day, and your own **join code** in place of `change-this-code`.
 4. In **Project Settings, API**, copy the project URL and the public key
    ("publishable" or "anon") into a file named `.env.local`, following
    [`.env.example`](.env.example). On Vercel, add the same two variables in
@@ -72,7 +78,8 @@ code, edit the row in `lab_secret`.
 
 ### Who can see what
 
-Members see each member's name, profile photo and minutes of writing per day. Nobody outside
+Members see each member's name, profile photo, daily goal in minutes and
+minutes of writing per day. Goals written in words stay on each person's device. Nobody outside
 the lab can read anything: reading needs the join code. Each person can only
 add, change or delete their own sessions. Leaving the lab (bottom of the Lab
 page) removes that person's shared data for everyone.

@@ -1,7 +1,18 @@
 // Pure logic for the writing challenge: which sessions count, daily totals,
 // streaks. No React, no storage, no network, so it is easy to test.
 
-export const DEFAULT_RULES = { dailyGoalMin: 30, weekdaysOnly: true, startDay: null };
+// Without a goal of their own, a person's day counts as soon as they show up.
+export const SHOW_UP_MIN = 5;
+
+export const DEFAULT_RULES = {
+  dailyGoalMin: SHOW_UP_MIN, hasGoal: false, weekdaysOnly: true, startDay: null, suggestedGoalMin: 30,
+};
+
+// Each person sets their own daily goal, or none.
+export function rulesFor(base, goalMin) {
+  const goal = Number(goalMin) > 0 ? Math.round(Number(goalMin)) : null;
+  return { ...base, dailyGoalMin: goal ?? SHOW_UP_MIN, hasGoal: Boolean(goal) };
+}
 
 // Local calendar day of a timestamp, as 'YYYY-MM-DD'.
 export function dayKey(ts) {

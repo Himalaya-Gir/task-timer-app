@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Nav, { Avatar } from './Nav';
 import { fileToAvatar } from './utils';
 import { useLab } from './AppContext';
-import { DEFAULT_RULES, formatMinutes, memberSummary } from './challenge';
+import { DEFAULT_RULES, formatMinutes, memberSummary, rulesFor } from './challenge';
 import { labTitles, levelOf, teamGoal, xpOf } from './game';
 import { demoBoard } from './demoBoard';
 
@@ -106,8 +106,7 @@ export default function LabPage() {
   const demo = params.has('demo');
   const [sortKey, setSortKey] = useState('weekSecs');
 
-  const rules = demo ? DEFAULT_RULES : lab.rules;
-  const goalSecs = rules.dailyGoalMin * 60;
+  const base = demo ? DEFAULT_RULES : lab.baseRules;
   const showBoard = demo || lab.joined;
 
   const rows = useMemo(() => {
@@ -122,15 +121,17 @@ export default function LabPage() {
         // My own row uses what is on this device, so it updates at once.
         const totals = me && !demo ? lab.myTotals : m.totals;
         const avatar = me && !demo ? lab.photo : m.avatar;
-        const summary = memberSummary(totals, lab.today, rules);
+        // Each person is measured against their own goal (or just showing up).
+        const own = me && !demo ? lab.rules : rulesFor(base, m.goalMin);
+        const summary = memberSummary(totals, lab.today, own);
         const xp = xpOf(summary);
-        return { id: m.id, name: m.name, avatar, me, xp, level: levelOf(xp).level, ...summary };
+        return { id: m.id, name: m.name, avatar, me, xp, goalSecs: own.dailyGoalMin * 60, hasGoal: own.hasGoal, level: levelOf(xp).level, ...summary };
       })
       .sort((a, b) => b[sortKey] - a[sortKey] || b.xp - a.xp || a.name.localeCompare(b.name));
-  }, [demo, lab.joined, lab.board, lab.myTotals, lab.photo, lab.profile, lab.today, rules, sortKey]);
+  }, [demo, lab.joined, lab.board, lab.myTotals, lab.photo, lab.profile, lab.today, lab.rules, base, sortKey]);
 
   const wroteToday = rows.filter(r => r.todayMet).length;
-  const team = teamGoal(rows, rules);
+  const team = teamGoal(rows, base);
   const titles = useMemo(() => labTitles(rows), [rows]);
   const titlesOf = (id) => titles.filter(t => t.memberId === id);
   const heading = demo ? 'Sample lab' : lab.joined ? (lab.labName ?? 'Lab') : 'Writing challenge';
@@ -147,8 +148,8 @@ export default function LabPage() {
         <div className="page-head">
           <h1>{heading}</h1>
           <p>
-            {rules.dailyGoalMin} minutes of writing, {rules.weekdaysOnly ? 'every weekday' : 'every day'}.
-            {rules.weekdaysOnly && ' Weekends are a bonus and never break a streak.'}
+            Everyone writes toward their own daily goal, or simply shows up for {DEFAULT_RULES.dailyGoalMin} minutes.
+            {base.weekdaysOnly && ' Weekends are free: they never break a streak.'}
           </p>
         </div>
 
@@ -162,7 +163,7 @@ export default function LabPage() {
             </div>
             <div className="figure">
               <strong>{wroteToday} of {rows.length}</strong>
-              <span>reached the goal today</span>
+              <span>did their day today</span>
             </div>
           </section>
         )}
@@ -202,8 +203,10 @@ export default function LabPage() {
                   {titlesOf(r.id).length > 0 && <span className="tags">{titlesOf(r.id).map(t => <span key={t.id} className="tag">{t.title}</span>)}</span>}
                 </span>
               </span>
-              <span role="cell" className="board-week"><WeekMarks week={r.week} goalSecs={goalSecs} /></span>
-              <span className={`num${r.todayMet ? ' done' : ''}`} role="cell" data-label="Today">{formatMinutes(r.todaySecs)}</span>
+              <span role="cell" className="board-week"><WeekMarks week={r.week} goalSecs={r.goalSecs} /></span>
+              <span className={`num${r.todayMet ? ' done' : ''}`} role="cell" data-label="Today" title={r.hasGoal ? `Own goal: ${r.goalSecs / 60} min a day` : 'No set goal'}>
+                {formatMinutes(r.todaySecs)}{r.hasGoal && <small> of {r.goalSecs / 60}</small>}
+              </span>
               <span className="num" role="cell" data-label="Streak">{r.streak} {r.streak === 1 ? 'day' : 'days'}</span>
               <span className="num" role="cell" data-label="Week">{formatMinutes(r.weekSecs)}</span>
               <span className="num" role="cell" data-label="Level">{r.level}</span>

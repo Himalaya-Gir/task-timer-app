@@ -35,10 +35,11 @@ export async function joinLab(name, code) {
   check(await supabase.rpc('join_lab', { p_name: name, p_code: code }));
 }
 
-export async function setAvatar(avatar) {
+// fields: { avatar } and/or { goal_min }
+export async function updateMember(fields) {
   const supabase = await signedIn();
   const { data } = await supabase.auth.getUser();
-  if (data.user) check(await supabase.from('members').update({ avatar }).eq('id', data.user.id));
+  if (data.user) check(await supabase.from('members').update(fields).eq('id', data.user.id));
 }
 
 export async function leaveLab() {
@@ -54,7 +55,7 @@ export async function fetchRules() {
   if (!lab) return null;
   return {
     name: lab.name,
-    dailyGoalMin: lab.daily_goal_min,
+    suggestedGoalMin: lab.daily_goal_min,
     weekdaysOnly: lab.weekdays_only,
     startDay: lab.start_day,
   };
@@ -83,7 +84,7 @@ export async function pushSessions(sessions, syncedIds, pendingDeletes) {
 export async function fetchBoard(startDay) {
   const supabase = await signedIn();
   const { data: auth } = await supabase.auth.getUser();
-  const members = check(await supabase.from('members').select('id,name,avatar').order('joined_at'));
+  const members = check(await supabase.from('members').select('id,name,avatar,goal_min').order('joined_at'));
 
   const rows = [];
   for (let from = 0; ; from += 1000) {
@@ -95,7 +96,7 @@ export async function fetchBoard(startDay) {
     if (page.length < 1000) break;
   }
 
-  const byMember = new Map(members.map(m => [m.id, { ...m, totals: {} }]));
+  const byMember = new Map(members.map(m => [m.id, { id: m.id, name: m.name, avatar: m.avatar, goalMin: m.goal_min, totals: {} }]));
   for (const r of rows) {
     const m = byMember.get(r.user_id);
     if (m) m.totals[r.day] = r.seconds;

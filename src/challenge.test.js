@@ -99,3 +99,12 @@ describe('formatMinutes', () => {
     expect(formatMinutes(3600 + 5 * 60)).toBe('1 h 05');
   });
 });
+
+describe('rulesFor', () => {
+  it('uses a person\'s own goal, or just showing up', async () => {
+    const { rulesFor, DEFAULT_RULES } = await import('./challenge');
+    expect(rulesFor(DEFAULT_RULES, 45)).toMatchObject({ dailyGoalMin: 45, hasGoal: true });
+    expect(rulesFor(DEFAULT_RULES, null)).toMatchObject({ dailyGoalMin: 5, hasGoal: false });
+    expect(rulesFor(DEFAULT_RULES, 0).hasGoal).toBe(false);
+  });
+});

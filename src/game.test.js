@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { memberSummary } from './challenge';
 import { badges, dailyQuests, labTitles, levelOf, longestStreak, teamGoal, weeklyQuests, xpOf } from './game';
 
-const rules = { dailyGoalMin: 30, weekdaysOnly: true, startDay: null };
+const rules = { dailyGoalMin: 30, hasGoal: true, weekdaysOnly: true, startDay: null };
+const free = { dailyGoalMin: 5, hasGoal: false, weekdaysOnly: true, startDay: null };
 const M = 60;
 const THU = '2026-11-19';
 const at = (day, hour, mins, extra = {}) => {
@@ -42,6 +43,11 @@ describe('dailyQuests', () => {
     expect(q[1]).toMatchObject({ id: 'goal', done: false });
     expect(q[1].progress).toBeCloseTo(0.4);
   });
+  it('has no goal line for someone without a goal', () => {
+    const q = dailyQuests([at(THU, 11, 12)], { [THU]: 12 * M }, THU, free);
+    expect(q.map(x => x.id)).not.toContain('goal');
+    expect(q).toHaveLength(2);
+  });
   it('rotates the bonus challenge from day to day', () => {
     const ids = new Set(['2026-11-16', '2026-11-17', '2026-11-18', THU, '2026-11-20']
       .map(d => dailyQuests([], {}, d, rules)[2].id));
@@ -50,12 +56,13 @@ describe('dailyQuests', () => {
 });
 
 describe('weeklyQuests', () => {
-  it('counts weekdays at goal and weekend writing', () => {
+  it('counts weekdays at goal, with nothing about weekends', () => {
     const totals = { '2026-11-16': 30 * M, '2026-11-17': 45 * M, '2026-11-21': 10 * M };
-    const [perfect, volume, weekend] = weeklyQuests(totals, '2026-11-21', rules);
+    const quests = weeklyQuests(totals, '2026-11-21', rules);
+    const [perfect, volume] = quests;
+    expect(quests).toHaveLength(2);
     expect(perfect.progress).toBeCloseTo(0.4);
     expect(volume.done).toBe(false);
-    expect(weekend.done).toBe(true);
   });
 });
 
@@ -89,7 +96,9 @@ describe('lab', () => {
     expect(t).toEqual({ streak: 'a', week: 'b', regular: 'a', day: 'b' });
     expect(labTitles([rows[0]])).toEqual([]);
   });
-  it('adds up the team goal', () => {
+  it('adds up the team goal from each person\'s own goal', () => {
+    const own = [{ ...rows[0], goalSecs: 45 * M }, { ...rows[1], goalSecs: 5 * M }, rows[2]];
+    expect(teamGoal(own, rules).target).toBe((45 + 5 + 30) * M * 5);
     const g = teamGoal(rows, rules);
     expect(g.target).toBe(3 * 30 * M * 5);
     expect(g.done).toBe(210 * M);

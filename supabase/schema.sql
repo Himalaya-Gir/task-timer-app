@@ -2,6 +2,9 @@
 -- Paste this whole file once into the Supabase SQL editor (see README).
 -- Then set your own join code at the bottom.
 
+-- Each person may set their own daily goal (minutes), or leave it empty.
+-- lab.daily_goal_min is only the goal the app suggests.
+
 -- ── Tables ───────────────────────────────────────────────────────────────
 
 -- One row: the rules of the challenge. Readable by everyone who has the app.
@@ -26,6 +29,9 @@ create table if not exists public.members (
 );
 
 -- Profile photo: a small square picture, shrunk in the browser before sending.
+alter table public.members add column if not exists goal_min int
+  check (goal_min is null or goal_min between 1 and 600);
+
 alter table public.members add column if not exists avatar text
   check (avatar is null or (avatar like 'data:image/%' and char_length(avatar) < 100000));
 
@@ -78,7 +84,7 @@ alter table public.sessions   enable row level security;
 
 grant select on public.lab to anon, authenticated;
 grant select, delete on public.members to authenticated;
-grant update (avatar) on public.members to authenticated;
+grant update (avatar, goal_min) on public.members to authenticated;
 grant select, insert, update, delete on public.sessions to authenticated;
 revoke all on public.lab_secret from anon, authenticated;
 
@@ -95,7 +101,8 @@ create policy "leave the lab" on public.members
   for delete to authenticated using (id = auth.uid());
 
 drop policy if exists "change own photo" on public.members;
-create policy "change own photo" on public.members
+drop policy if exists "change own profile" on public.members;
+create policy "change own profile" on public.members
   for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
 drop policy if exists "members see sessions" on public.sessions;

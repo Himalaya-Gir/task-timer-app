@@ -859,7 +859,7 @@ a {
 
 .board-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.6fr) 196px repeat(4, minmax(64px, 1fr));
+  grid-template-columns: minmax(190px, 2fr) 196px minmax(96px, 1.2fr) repeat(3, minmax(60px, 1fr));
   align-items: center;
   gap: 12px;
   min-height: 60px;
@@ -946,6 +946,7 @@ a {
   border: 1px solid var(--accent);
   border-radius: 4px;
   padding: 1px 5px;
+  white-space: nowrap;
 }
 
 .sort-btn {
@@ -1318,6 +1319,74 @@ a {
   font-family: var(--mono);
   font-size: 13px;
   text-align: right;
+}
+
+/* ── Own goals ────────────────────────────────────────────── */
+
+.own-goal-line {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.own-goal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.own-goal input {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 14px;
+  min-width: 0;
+}
+
+.own-goal input[type='number'] {
+  width: 76px;
+}
+
+.own-goal.add input {
+  flex: 1;
+}
+
+.quest.own {
+  align-items: center;
+}
+
+.quest.own .quest-box {
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+
+.quest.own.done .quest-box {
+  background: var(--accent);
+}
+
+.quest.own.done .quest-text strong {
+  text-decoration: line-through;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.quest.own .quest-text strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.board-row .num small {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
 }
 
 /* ── Profile photos ───────────────────────────────────────── */

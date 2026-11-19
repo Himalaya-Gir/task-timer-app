@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { DEFAULT_RULES, dayKey, memberSummary, writingByDay } from './challenge';
+import { DEFAULT_RULES, dayKey, memberSummary, rulesFor, writingByDay } from './challenge';
 import { makeSession, upgradeSessions, readJSON, writeJSON } from './utils';
 import * as labApi from './labApi';
 
@@ -105,10 +105,16 @@ export function AppProvider({ children }) {
   const [labStatus, setLabStatus] = useState({ state: 'idle', error: null, syncedAt: null });
 
   const joined = labApi.labConfigured && Boolean(profile);
-  const rules = useMemo(
-    () => (joined && labRules ? labRules : DEFAULT_RULES),
+  // My own daily goal in minutes, or null: nobody has to set one.
+  const [myGoalMin, setMyGoalState] = useState(() => readJSON('myGoalMin', null));
+  // My own written goals: [{ id, text, done }]. They stay on this device.
+  const [myGoals, setMyGoalsState] = useState(() => readJSON('myGoals', []));
+
+  const baseRules = useMemo(
+    () => (joined && labRules ? { ...DEFAULT_RULES, ...labRules } : DEFAULT_RULES),
     [joined, labRules]
   );
+  const rules = useMemo(() => rulesFor(baseRules, myGoalMin), [baseRules, myGoalMin]);
 
   const myTotals = useMemo(() => writingByDay(sessions), [sessions]);
   const mySummary = useMemo(() => memberSummary(myTotals, today, rules), [myTotals, today, rules]);
@@ -129,8 +135,12 @@ export function AppProvider({ children }) {
       if (fetched) { setLabRules(fetched); writeJSON('labRules', fetched); }
 
       if (localStorage.getItem('labPhotoDirty') === '1') {
-        await labApi.setAvatar(localStorage.getItem('profilePhoto'));
+        await labApi.updateMember({ avatar: localStorage.getItem('profilePhoto') });
         localStorage.removeItem('labPhotoDirty');
+      }
+      if (localStorage.getItem('labGoalDirty') === '1') {
+        await labApi.updateMember({ goal_min: readJSON('myGoalMin', null) });
+        localStorage.removeItem('labGoalDirty');
       }
 
       const synced = new Set(readJSON('labSynced', []));
@@ -168,13 +178,14 @@ export function AppProvider({ children }) {
     await labApi.joinLab(name, code);
     const p = { name };
     if (localStorage.getItem('profilePhoto')) localStorage.setItem('labPhotoDirty', '1');
+    localStorage.setItem('labGoalDirty', '1');
     writeJSON('labProfile', p);
     setProfile(p);
   }, []);
 
   const leaveLab = useCallback(async () => {
     await labApi.leaveLab();
-    ['labProfile', 'labSynced', 'labPendingDeletes', 'labRules', 'labPhotoDirty'].forEach(k => localStorage.removeItem(k));
+    ['labProfile', 'labSynced', 'labPendingDeletes', 'labRules', 'labPhotoDirty', 'labGoalDirty'].forEach(k => localStorage.removeItem(k));
     setProfile(null);
     setBoard(null);
     setLabRules(null);
@@ -191,9 +202,26 @@ export function AppProvider({ children }) {
     sync();
   }, [sync]);
 
+  const setMyGoalMin = useCallback((minutes) => {
+    const value = Number(minutes) > 0 ? Math.min(600, Math.round(Number(minutes))) : null;
+    writeJSON('myGoalMin', value);
+    try { localStorage.setItem('labGoalDirty', '1'); } catch { /* storage unavailable */ }
+    setMyGoalState(value);
+    sync();
+  }, [sync]);
+
+  const setMyGoals = useCallback((update) => {
+    setMyGoalsState(prev => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      writeJSON('myGoals', next);
+      return next;
+    });
+  }, []);
+
   const labValue = {
     configured: labApi.labConfigured,
-    joined, profile, rules, labName: labRules?.name ?? null,
+    joined, profile, rules, baseRules, labName: labRules?.name ?? null,
+    myGoalMin, setMyGoalMin, myGoals, setMyGoals,
     today, myTotals, mySummary, board, status: labStatus,
     photo, setPhoto, joinLab, leaveLab, sync,
   };

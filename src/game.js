@@ -43,7 +43,7 @@ const dayNumber = (key) => Math.round(new Date(`${key}T12:00:00`).getTime() / 86
 // Two fixed ones and a bonus that changes every day. `totals` should already
 // include the session in progress.
 export function dailyQuests(sessions, totals, today, rules) {
-  const goal = rules.dailyGoalMin;
+  const goal = rules.hasGoal ? rules.dailyGoalMin : 20;
   const mins = (totals[today] || 0) / 60;
   const mine = sessions.filter(s => isWriting(s.category) && sessionDay(s) === today);
   const longest = mine.reduce((a, s) => Math.max(a, s.duration), 0) / 60;
@@ -61,11 +61,12 @@ export function dailyQuests(sessions, totals, today, rules) {
     () => quest('beat', 'Beat your last day', `More than ${lastMins} minutes today`, mins, lastMins + 1),
   ];
 
+  // The goal line only exists for people who chose to set a goal.
   return [
     quest('show', 'Show up', '5 minutes of writing', mins, 5),
-    quest('goal', 'Daily goal', `${goal} minutes of writing`, mins, goal),
+    rules.hasGoal && quest('goal', 'Your daily goal', `${goal} minutes of writing`, mins, goal),
     bonus[dayNumber(today) % bonus.length](),
-  ];
+  ].filter(Boolean);
 }
 
 // ── This week's challenges ────────────────────────────────────────────────
@@ -74,13 +75,11 @@ export function weeklyQuests(totals, today, rules) {
   const weekdays = week.slice(0, 5);
   const met = weekdays.filter(k => metGoal(totals[k], rules)).length;
   const mins = week.reduce((a, k) => a + (totals[k] || 0), 0) / 60;
-  const weekend = week.slice(5).some(k => (totals[k] || 0) >= 300) ? 1 : 0;
-  const target = rules.dailyGoalMin * 6;
+  const target = rules.hasGoal ? rules.dailyGoalMin * 6 : 120;
   const hours = target % 60 === 0 ? `${target / 60} hours` : `${target} minutes`;
   return [
-    quest('perfect', 'Perfect week', `Goal met Monday to Friday (${met} of 5)`, met, 5),
+    quest('perfect', 'Perfect week', `${rules.hasGoal ? 'Goal met' : 'Writing'} Monday to Friday (${met} of 5)`, met, 5),
     quest('volume', 'Big week', `${hours} of writing this week`, mins, target),
-    quest('weekend', 'Weekend bonus', 'Write on Saturday or Sunday', weekend, 1),
   ];
 }
 
@@ -108,15 +107,13 @@ export function badges(sessions, totals, today, rules) {
     b('h10', '10h', 'Ten hours', '10 hours of writing in total', hours >= 10),
     b('h25', '25h', 'Twenty-five hours', '25 hours of writing in total', hours >= 25),
     b('h50', '50h', 'Fifty hours', '50 hours of writing in total', hours >= 50),
-    b('week', '5/5', 'Perfect week', 'Goal met Monday to Friday', perfectWeek),
+    b('week', '5/5', 'Perfect week', 'A full week, Monday to Friday', perfectWeek),
     b('long', '90', 'Marathon', '90 minutes of writing in one day', days.some(k => totals[k] >= 5400)),
-    b('wknd', 'S', 'Weekend writer', 'Goal met on a Saturday or Sunday',
-      days.some(k => isWeekend(k) && metGoal(totals[k], rules))),
     b('early', 'AM', 'Early bird', 'Start a session before 8 am',
       writing.some(s => new Date(s.start).getHours() < 8 && s.endType !== 'manual')),
     b('owl', 'PM', 'Night owl', 'Start a session after 9 pm',
       writing.some(s => new Date(s.start).getHours() >= 21 && s.endType !== 'manual')),
-    b('back', 'RE', 'Comeback', 'Meet the goal again after a missed day', comeback),
+    b('back', 'RE', 'Comeback', 'Write again after a missed day', comeback),
   ];
 }
 
@@ -138,9 +135,11 @@ export function labTitles(rows) {
   ].filter(t => t.who).map(t => ({ id: t.id, title: t.title, memberId: t.who.id, name: t.who.name, value: t.value(t.who) }));
 }
 
+// The lab's target is the sum of what each person aims for (their own goal,
+// or just showing up), over the days that count.
 export function teamGoal(rows, rules) {
   const days = rules.weekdaysOnly ? 5 : 7;
-  const target = rows.length * rules.dailyGoalMin * 60 * days;
+  const target = rows.reduce((a, r) => a + (r.goalSecs ?? rules.dailyGoalMin * 60), 0) * days;
   const done = rows.reduce((a, r) => a + r.weekSecs, 0);
   return { done, target, progress: target ? Math.min(1, done / target) : 0 };
 }

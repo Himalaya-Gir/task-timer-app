@@ -21,7 +21,7 @@ function getSavedTimer() {
 export default function HomePage() {
   const { categories, setCategories, getCategoryColor, activeCategory: category, setActiveCategory: setCategory } = useCategories();
   const { sessions, addSession } = useSessions();
-  const { mySummary, myTotals, today, rules, joined, labName, photo, profile } = useLab();
+  const { mySummary, myTotals, today, rules, joined, labName, photo, profile, myGoalMin, setMyGoalMin, myGoals, setMyGoals } = useLab();
 
   // ── Timer state ──────────────────────────────────────────────────────
   const saved = getSavedTimer();
@@ -348,13 +348,32 @@ export default function HomePage() {
   const wasDone = useRef(todayDone);
   useEffect(() => {
     if (todayDone && !wasDone.current) {
-      setToast('Daily goal reached. Well done.');
+      setToast(rules.hasGoal ? 'Your goal for today is reached. Well done.' : 'You showed up today. Well done.');
       const id = setTimeout(() => setToast(null), 6000);
       wasDone.current = true;
       return () => clearTimeout(id);
     }
     wasDone.current = todayDone;
   }, [todayDone]);
+
+  // ── My own goals: a daily number of minutes, and anything I write ─────
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
+  const [newGoal, setNewGoal] = useState('');
+
+  const openGoal = () => { setGoalInput(String(myGoalMin ?? rules.suggestedGoalMin ?? 30)); setEditingGoal(true); };
+  const saveGoal = (e) => { e.preventDefault(); setMyGoalMin(goalInput); setEditingGoal(false); };
+  const clearGoal = () => { setMyGoalMin(null); setEditingGoal(false); };
+
+  const addGoal = (e) => {
+    e.preventDefault();
+    const text = newGoal.trim();
+    if (!text) return;
+    setMyGoals(prev => [...prev, { id: `${Date.now()}`, text, done: false }]);
+    setNewGoal('');
+  };
+  const toggleGoal = (id) => setMyGoals(prev => prev.map(g => g.id === id ? { ...g, done: !g.done } : g));
+  const removeGoal = (id) => setMyGoals(prev => prev.filter(g => g.id !== id));
 
   const formatTime = () => {
     const m = Math.floor(time / 60);
@@ -438,7 +457,7 @@ export default function HomePage() {
 
           {focus ? (
             <div className="focus-foot">
-              <span>{formatMinutes(todaySecs)} of {rules.dailyGoalMin} min today</span>
+              <span>{formatMinutes(todaySecs)}{rules.hasGoal ? ` of ${rules.dailyGoalMin} min` : ''} today</span>
               <button className="link-btn" onClick={() => setFocus(false)}>Leave focus (Esc)</button>
             </div>
           ) : (
@@ -546,11 +565,44 @@ export default function HomePage() {
             <section>
               <h2>Today <span>{questsDone} of {todayQuests.length}</span></h2>
               <ul className="quests">{todayQuests.map(q => <Quest key={q.id} q={q} />)}</ul>
+              {editingGoal ? (
+                <form className="own-goal" onSubmit={saveGoal}>
+                  <label htmlFor="own-goal-min">My goal</label>
+                  <input id="own-goal-min" type="number" min="1" max="600" value={goalInput} onChange={e => setGoalInput(e.target.value)} autoFocus required />
+                  <span>min a day</span>
+                  <button type="submit" className="btn btn-primary">Save</button>
+                  <button type="button" className="link-btn" onClick={clearGoal}>No goal</button>
+                </form>
+              ) : (
+                <p className="own-goal-line">
+                  {myGoalMin ? `Your goal: ${myGoalMin} min a day.` : 'No daily goal. Showing up is enough.'}{' '}
+                  <button className="link-btn" onClick={openGoal}>{myGoalMin ? 'Change' : 'Set one if you like'}</button>
+                </p>
+              )}
             </section>
 
             <section>
               <h2>This week</h2>
               <ul className="quests">{weekQuests.map(q => <Quest key={q.id} q={q} />)}</ul>
+            </section>
+
+            <section>
+              <h2>My own goals</h2>
+              <ul className="quests">
+                {myGoals.map(g => (
+                  <li key={g.id} className={`quest own${g.done ? ' done' : ''}`}>
+                    <button className="quest-box" onClick={() => toggleGoal(g.id)} aria-pressed={g.done} aria-label={g.done ? `Mark as not done: ${g.text}` : `Mark as done: ${g.text}`}>
+                      {g.done && <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 6.2l2.4 2.4 4.6-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                    </button>
+                    <span className="quest-text"><strong>{g.text}</strong></span>
+                    <button className="session-remove" onClick={() => removeGoal(g.id)} aria-label={`Delete: ${g.text}`} title="Delete">×</button>
+                  </li>
+                ))}
+              </ul>
+              <form className="own-goal add" onSubmit={addGoal}>
+                <input value={newGoal} onChange={e => setNewGoal(e.target.value)} placeholder="Write a goal of your own (optional)" aria-label="A goal of your own" maxLength={120} />
+                <button type="submit" className="btn btn-ghost" disabled={!newGoal.trim()}>Add</button>
+              </form>
             </section>
 
             <Link to="/lab" className="side-link">

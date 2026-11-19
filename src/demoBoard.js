@@ -2,8 +2,8 @@
 import { addDays, isWeekend } from './challenge';
 
 const PEOPLE = [
-  ['Ada', 0.95, 48], ['Noam', 0.8, 80], ['Rosalind', 0.9, 62],
-  ['Alan', 0.55, 30], ['Grace', 0.9, 31], ['Santiago', 0.35, 25],
+  ['Ada', 0.95, 48, 30], ['Noam', 0.8, 80, 60], ['Rosalind', 0.9, 62, 45],
+  ['Alan', 0.55, 30, null], ['Grace', 0.9, 31, 20], ['Santiago', 0.35, 25, null],
 ];
 
 // Small deterministic generator: the demo looks the same on every visit.
@@ -13,7 +13,7 @@ function rng(seed) {
 }
 
 export function demoBoard(today) {
-  const members = PEOPLE.map(([name, regularity, minutes], i) => {
+  const members = PEOPLE.map(([name, regularity, minutes, goalMin], i) => {
     const rand = rng(i + 7);
     const totals = {};
     for (let back = 24; back >= 0; back--) {
@@ -21,7 +21,7 @@ export function demoBoard(today) {
       const chance = isWeekend(day) ? regularity * 0.25 : regularity;
       if (rand() < chance) totals[day] = Math.round(minutes * (0.6 + rand() * 0.9)) * 60;
     }
-    return { id: `demo-${i}`, name, totals };
+    return { id: `demo-${i}`, name, goalMin, totals };
   });
   return { myId: 'demo-0', members };
 }
