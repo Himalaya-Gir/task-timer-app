@@ -28,10 +28,11 @@ create table if not exists public.members (
   joined_at timestamptz not null default now()
 );
 
--- Profile photo: a small square picture, shrunk in the browser before sending.
+-- A person's own daily goal in minutes. Empty means no goal.
 alter table public.members add column if not exists goal_min int
   check (goal_min is null or goal_min between 1 and 600);
 
+-- Profile photo: a small square picture, shrunk in the browser before sending.
 alter table public.members add column if not exists avatar text
   check (avatar is null or (avatar like 'data:image/%' and char_length(avatar) < 100000));
 

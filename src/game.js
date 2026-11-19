@@ -128,9 +128,9 @@ export function labTitles(rows) {
   const daysMet = (r) => r.week.filter(d => d.met).length;
   const bigDay = (r) => Math.max(...r.week.map(d => d.secs));
   return [
-    { id: 'streak', title: 'Longest streak', who: top(r => r.streak), value: r => `${r.streak} days` },
+    { id: 'streak', title: 'Longest streak', who: top(r => r.streak), value: r => `${r.streak} ${r.streak === 1 ? 'day' : 'days'}` },
     { id: 'week', title: 'Most written', who: top(r => r.weekSecs), value: r => formatMinutes(r.weekSecs) },
-    { id: 'regular', title: 'Most regular', who: top(daysMet), value: r => `${daysMet(r)} days at goal` },
+    { id: 'regular', title: 'Most regular', who: top(daysMet), value: r => `${daysMet(r)} ${daysMet(r) === 1 ? 'day' : 'days'} done` },
     { id: 'day', title: 'Biggest day', who: top(bigDay), value: r => formatMinutes(bigDay(r)) },
   ].filter(t => t.who).map(t => ({ id: t.id, title: t.title, memberId: t.who.id, name: t.who.name, value: t.value(t.who) }));
 }
