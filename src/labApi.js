@@ -35,6 +35,12 @@ export async function joinLab(name, code) {
   check(await supabase.rpc('join_lab', { p_name: name, p_code: code }));
 }
 
+export async function setAvatar(avatar) {
+  const supabase = await signedIn();
+  const { data } = await supabase.auth.getUser();
+  if (data.user) check(await supabase.from('members').update({ avatar }).eq('id', data.user.id));
+}
+
 export async function leaveLab() {
   const supabase = await signedIn();
   const { data } = await supabase.auth.getUser();
@@ -77,7 +83,7 @@ export async function pushSessions(sessions, syncedIds, pendingDeletes) {
 export async function fetchBoard(startDay) {
   const supabase = await signedIn();
   const { data: auth } = await supabase.auth.getUser();
-  const members = check(await supabase.from('members').select('id,name').order('joined_at'));
+  const members = check(await supabase.from('members').select('id,name,avatar').order('joined_at'));
 
   const rows = [];
   for (let from = 0; ; from += 1000) {

@@ -101,6 +101,7 @@ export function AppProvider({ children }) {
   const [profile, setProfile] = useState(() => readJSON('labProfile', null));
   const [labRules, setLabRules] = useState(() => readJSON('labRules', null));
   const [board, setBoard] = useState(null);
+  const [photo, setPhotoState] = useState(() => localStorage.getItem('profilePhoto'));
   const [labStatus, setLabStatus] = useState({ state: 'idle', error: null, syncedAt: null });
 
   const joined = labApi.labConfigured && Boolean(profile);
@@ -126,6 +127,11 @@ export function AppProvider({ children }) {
     try {
       const fetched = await labApi.fetchRules();
       if (fetched) { setLabRules(fetched); writeJSON('labRules', fetched); }
+
+      if (localStorage.getItem('labPhotoDirty') === '1') {
+        await labApi.setAvatar(localStorage.getItem('profilePhoto'));
+        localStorage.removeItem('labPhotoDirty');
+      }
 
       const synced = new Set(readJSON('labSynced', []));
       const deletes = readJSON('labPendingDeletes', []);
@@ -161,23 +167,35 @@ export function AppProvider({ children }) {
   const joinLab = useCallback(async (name, code) => {
     await labApi.joinLab(name, code);
     const p = { name };
+    if (localStorage.getItem('profilePhoto')) localStorage.setItem('labPhotoDirty', '1');
     writeJSON('labProfile', p);
     setProfile(p);
   }, []);
 
   const leaveLab = useCallback(async () => {
     await labApi.leaveLab();
-    ['labProfile', 'labSynced', 'labPendingDeletes', 'labRules'].forEach(k => localStorage.removeItem(k));
+    ['labProfile', 'labSynced', 'labPendingDeletes', 'labRules', 'labPhotoDirty'].forEach(k => localStorage.removeItem(k));
     setProfile(null);
     setBoard(null);
     setLabRules(null);
   }, []);
 
+  // The photo lives on this device; it is sent to the lab at the next sync.
+  const setPhoto = useCallback((dataUrl) => {
+    try {
+      if (dataUrl) localStorage.setItem('profilePhoto', dataUrl);
+      else localStorage.removeItem('profilePhoto');
+      localStorage.setItem('labPhotoDirty', '1');
+    } catch { /* storage unavailable */ }
+    setPhotoState(dataUrl);
+    sync();
+  }, [sync]);
+
   const labValue = {
     configured: labApi.labConfigured,
     joined, profile, rules, labName: labRules?.name ?? null,
     today, myTotals, mySummary, board, status: labStatus,
-    joinLab, leaveLab, sync,
+    photo, setPhoto, joinLab, leaveLab, sync,
   };
 
   return (

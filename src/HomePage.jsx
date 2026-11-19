@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import Nav, { Quest } from './Nav';
+import Nav, { Avatar, Quest } from './Nav';
 import { useCategories, useSessions, useLab } from './AppContext';
 import { makeSession } from './utils';
 import { formatMinutes, isWriting } from './challenge';
@@ -21,7 +21,7 @@ function getSavedTimer() {
 export default function HomePage() {
   const { categories, setCategories, getCategoryColor, activeCategory: category, setActiveCategory: setCategory } = useCategories();
   const { sessions, addSession } = useSessions();
-  const { mySummary, myTotals, today, rules, joined, labName } = useLab();
+  const { mySummary, myTotals, today, rules, joined, labName, photo, profile } = useLab();
 
   // ── Timer state ──────────────────────────────────────────────────────
   const saved = getSavedTimer();
@@ -533,6 +533,9 @@ export default function HomePage() {
               <div className="stat-big">
                 <strong>{mySummary.streak}</strong>
                 <span>{mySummary.streak === 1 ? 'day in a row' : 'days in a row'}</span>
+                <Link to="/lab" className="me-photo" title={photo ? 'Your profile' : 'Add your photo'} aria-label={photo ? 'Your profile' : 'Add your photo'}>
+                  <Avatar src={photo} name={profile?.name ?? 'You'} size={52} />
+                </Link>
               </div>
               <div className="level">
                 <div className="level-head"><strong>Level {level.level}</strong><span>{level.toNext} XP to level {level.level + 1}</span></div>

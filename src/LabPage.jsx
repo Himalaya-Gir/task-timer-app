@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import Nav from './Nav';
+import Nav, { Avatar } from './Nav';
+import { fileToAvatar } from './utils';
 import { useLab } from './AppContext';
 import { DEFAULT_RULES, formatMinutes, memberSummary } from './challenge';
 import { labTitles, levelOf, teamGoal, xpOf } from './game';
@@ -30,6 +31,40 @@ function WeekMarks({ week, goalSecs }) {
         );
       })}
     </div>
+  );
+}
+
+function ProfilePhoto() {
+  const { photo, setPhoto, joined, profile } = useLab();
+  const input = useRef(null);
+  const [error, setError] = useState(null);
+
+  const choose = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(null);
+    try { setPhoto(await fileToAvatar(file)); }
+    catch (err) { setError(err.message); }
+  };
+
+  return (
+    <section className="card profile">
+      <Avatar src={photo} name={profile?.name ?? 'You'} size={88} />
+      <div className="profile-text">
+        <h2>Your photo</h2>
+        <p className="note">
+          A picture of you writing, the sillier the better.
+          {joined ? ' Everyone in the lab sees it next to your name.' : ' It stays on this device until you join a lab.'}
+        </p>
+        <div className="profile-actions">
+          <input ref={input} type="file" accept="image/*" onChange={choose} hidden />
+          <button className="btn btn-primary" onClick={() => input.current?.click()}>{photo ? 'Change photo' : 'Choose a photo'}</button>
+          {photo && <button className="btn btn-ghost" onClick={() => setPhoto(null)}>Remove</button>}
+        </div>
+        {error && <p className="form-error">{error}</p>}
+      </div>
+    </section>
   );
 }
 
@@ -86,12 +121,13 @@ export default function LabPage() {
         const me = m.id === source.myId;
         // My own row uses what is on this device, so it updates at once.
         const totals = me && !demo ? lab.myTotals : m.totals;
+        const avatar = me && !demo ? lab.photo : m.avatar;
         const summary = memberSummary(totals, lab.today, rules);
         const xp = xpOf(summary);
-        return { id: m.id, name: m.name, me, xp, level: levelOf(xp).level, ...summary };
+        return { id: m.id, name: m.name, avatar, me, xp, level: levelOf(xp).level, ...summary };
       })
       .sort((a, b) => b[sortKey] - a[sortKey] || b.xp - a.xp || a.name.localeCompare(b.name));
-  }, [demo, lab.joined, lab.board, lab.myTotals, lab.profile, lab.today, rules, sortKey]);
+  }, [demo, lab.joined, lab.board, lab.myTotals, lab.photo, lab.profile, lab.today, rules, sortKey]);
 
   const wroteToday = rows.filter(r => r.todayMet).length;
   const team = teamGoal(rows, rules);
@@ -160,6 +196,7 @@ export default function LabPage() {
             <div key={r.id} className={`board-row${r.me && showBoard ? ' me' : ''}`} role="row">
               <span className="board-name" role="cell">
                 {showBoard && <span className="rank">{i + 1}</span>}
+                <Avatar src={r.avatar} name={r.name} />
                 <span className="who">
                   {r.name}{r.me && showBoard && <em>you</em>}
                   {titlesOf(r.id).length > 0 && <span className="tags">{titlesOf(r.id).map(t => <span key={t.id} className="tag">{t.title}</span>)}</span>}
@@ -193,6 +230,8 @@ export default function LabPage() {
             <p className="note"><Link to="/lab?demo">See a sample lab</Link></p>
           </section>
         )}
+
+        {!demo && <ProfilePhoto />}
 
         {!demo && lab.joined && (
           <p className="foot">

@@ -49,3 +49,31 @@ export function readJSON(key, fallback) {
 export function writeJSON(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
 }
+
+// Only pictures made by fileToAvatar are ever shown: never a link to elsewhere.
+export const isAvatar = (value) => typeof value === 'string' && value.startsWith('data:image/');
+
+// Turn any picture into a small square one (centre crop), light enough to
+// keep in the browser and share with the lab.
+export async function fileToAvatar(file, size = 192) {
+  if (!file || !file.type.startsWith('image/')) throw new Error('Please choose a picture.');
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('This picture could not be read. Try a JPEG or PNG.'));
+      el.src = url;
+    });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    canvas.getContext('2d').drawImage(
+      img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size
+    );
+    return canvas.toDataURL('image/jpeg', 0.82);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

@@ -72,10 +72,17 @@ code, edit the row in `lab_secret`.
 
 ### Who can see what
 
-Members see each member's name and minutes of writing per day. Nobody outside
+Members see each member's name, profile photo and minutes of writing per day. Nobody outside
 the lab can read anything: reading needs the join code. Each person can only
 add, change or delete their own sessions. Leaving the lab (bottom of the Lab
 page) removes that person's shared data for everyone.
+
+### Profile photos
+
+On the Lab page each person can choose a photo of themselves writing. It is
+cropped to a small square in the browser (about 10 KB) and stored with their
+name. If your database was created before photos existed, run
+`supabase/schema.sql` again: it only adds what is missing.
 
 ### Good to know
 

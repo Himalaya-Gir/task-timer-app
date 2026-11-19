@@ -25,6 +25,10 @@ create table if not exists public.members (
   joined_at timestamptz not null default now()
 );
 
+-- Profile photo: a small square picture, shrunk in the browser before sending.
+alter table public.members add column if not exists avatar text
+  check (avatar is null or (avatar like 'data:image/%' and char_length(avatar) < 100000));
+
 -- Writing sessions only. `day` is the writer's own local calendar day.
 create table if not exists public.sessions (
   id         uuid primary key,
@@ -74,6 +78,7 @@ alter table public.sessions   enable row level security;
 
 grant select on public.lab to anon, authenticated;
 grant select, delete on public.members to authenticated;
+grant update (avatar) on public.members to authenticated;
 grant select, insert, update, delete on public.sessions to authenticated;
 revoke all on public.lab_secret from anon, authenticated;
 
@@ -88,6 +93,10 @@ create policy "members see members" on public.members
 drop policy if exists "leave the lab" on public.members;
 create policy "leave the lab" on public.members
   for delete to authenticated using (id = auth.uid());
+
+drop policy if exists "change own photo" on public.members;
+create policy "change own photo" on public.members
+  for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
 drop policy if exists "members see sessions" on public.sessions;
 create policy "members see sessions" on public.sessions

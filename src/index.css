@@ -1320,6 +1320,55 @@ a {
   text-align: right;
 }
 
+/* ── Profile photos ───────────────────────────────────────── */
+
+.avatar {
+  border-radius: 28%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
+  background: var(--panel);
+}
+
+.avatar.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--display);
+  font-weight: 500;
+  color: var(--muted);
+  border: 1.5px dashed var(--muted);
+  background: transparent;
+}
+
+.me-photo {
+  margin-left: auto;
+  align-self: center;
+  text-decoration: none;
+  border-radius: 28%;
+}
+
+.profile {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.profile-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile h2 {
+  margin-bottom: 10px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* ── Smaller screens ──────────────────────────────────────── */
 
 @media (max-width: 900px) {

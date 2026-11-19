@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { isAvatar } from './utils';
 
 const ORDER = ['auto', 'day', 'night'];
 const LABEL = { auto: 'Auto', day: 'Day', night: 'Night' };
@@ -61,6 +62,13 @@ export default function Nav({ children }) {
       </div>
     </header>
   );
+}
+
+// A member's photo, or their initial when they have none.
+export function Avatar({ src, name, size = 40 }) {
+  const style = { width: size, height: size, fontSize: size * 0.42 };
+  if (isAvatar(src)) return <img className="avatar" src={src} alt="" style={style} />;
+  return <span className="avatar empty" style={style} aria-hidden="true">{(name || '?').trim().charAt(0).toUpperCase()}</span>;
 }
 
 // A small challenge line with its progress, used on the timer and lab pages.
