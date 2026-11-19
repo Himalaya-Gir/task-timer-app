@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import Nav, { Quest } from './Nav';
 import { useCategories, useSessions, useLab } from './AppContext';
-import { getContrastColor, makeSession } from './utils';
+import { makeSession } from './utils';
 import { formatMinutes, isWriting } from './challenge';
+import { dailyQuests, levelOf, weeklyQuests, xpOf } from './game';
 import chimeSound from './assets/chime-sound-7143.mp3';
 
 const PRESET_COLORS = ['#1976d2', '#388e3c', '#d32f2f', '#7b1fa2', '#e65100', '#0097a7'];
@@ -18,8 +20,8 @@ function getSavedTimer() {
 
 export default function HomePage() {
   const { categories, setCategories, getCategoryColor, activeCategory: category, setActiveCategory: setCategory } = useCategories();
-  const { addSession } = useSessions();
-  const { mySummary, rules, joined } = useLab();
+  const { sessions, addSession } = useSessions();
+  const { mySummary, myTotals, today, rules, joined, labName } = useLab();
 
   // ── Timer state ──────────────────────────────────────────────────────
   const saved = getSavedTimer();
@@ -74,8 +76,7 @@ export default function HomePage() {
   const audioRef = useRef(null);
 
   // ── Derived theming ───────────────────────────────────────────────────
-  const bgColor = getCategoryColor(category);
-  const fg = getContrastColor(bgColor);
+  const catColor = getCategoryColor(category);
 
   // ── Stale-closure-safe session logger ─────────────────────────────────
   const logSessionRef = useRef(null);
@@ -118,12 +119,6 @@ export default function HomePage() {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [endTime, time]);
-
-  // ── Body background ───────────────────────────────────────────────────
-  useEffect(() => {
-    document.body.style.background = bgColor;
-    return () => { document.body.style.background = ''; };
-  }, [bgColor]);
 
   // ── Focus effects ────────────────────────────────────────────────────
   useEffect(() => {
@@ -325,17 +320,41 @@ export default function HomePage() {
     setAddingCategory(false);
   };
 
-  // ── Theme helpers ─────────────────────────────────────────────────────
-  const ghostStyle = { borderColor: fg, color: fg };
-  const solidStyle = { background: fg, borderColor: fg, color: bgColor };
+  // ── Focus mode: nothing but the clock ─────────────────────────────────
+  const [focus, setFocus] = useState(() => localStorage.getItem('focusMode') === '1');
+  useEffect(() => {
+    try { localStorage.setItem('focusMode', focus ? '1' : '0'); } catch { /* storage unavailable */ }
+    if (!focus) return;
+    const onKey = (e) => { if (e.key === 'Escape') setFocus(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focus]);
 
-  // Writing done today, including the session in progress.
+  // ── Writing today, including the session in progress ──────────────────
   const liveSecs = sessionStart && isWriting(category)
     ? accumulatedSecsRef.current + (isRunning && resumeTimeRef.current ? (Date.now() - resumeTimeRef.current) / 1000 : 0)
     : 0;
-  const todaySecs = mySummary.todaySecs + liveSecs;
-  const goalSecs = rules.dailyGoalMin * 60;
-  const todayDone = todaySecs >= goalSecs;
+  const liveTotals = liveSecs ? { ...myTotals, [today]: (myTotals[today] || 0) + liveSecs } : myTotals;
+  const todaySecs = liveTotals[today] || 0;
+  const todayDone = todaySecs >= rules.dailyGoalMin * 60;
+
+  const todayQuests = dailyQuests(sessions, liveTotals, today, rules);
+  const weekQuests = weeklyQuests(liveTotals, today, rules);
+  const level = levelOf(xpOf(mySummary) + Math.floor(liveSecs / 60));
+  const questsDone = todayQuests.filter(q => q.done).length;
+
+  // ── A short cheer when the daily goal is reached ──────────────────────
+  const [toast, setToast] = useState(null);
+  const wasDone = useRef(todayDone);
+  useEffect(() => {
+    if (todayDone && !wasDone.current) {
+      setToast('Daily goal reached. Well done.');
+      const id = setTimeout(() => setToast(null), 6000);
+      wasDone.current = true;
+      return () => clearTimeout(id);
+    }
+    wasDone.current = todayDone;
+  }, [todayDone]);
 
   const formatTime = () => {
     const m = Math.floor(time / 60);
@@ -343,179 +362,202 @@ export default function HomePage() {
     return `${m}:${s}`;
   };
 
+  const RING = 2 * Math.PI * 150;
+  const remaining = lastSetTime ? Math.min(1, time / lastSetTime) : 1;
+
   return (
-    <div className="timer-page" style={{ background: bgColor, color: fg }}>
+    <div className={`app home${focus ? ' focus' : ''}`}>
       <audio ref={audioRef} src={chimeSound} preload="auto" />
 
-      {/* Nav */}
-      <div className="timer-nav">
-        <Link to="/lab" className="nav-btn" style={ghostStyle}>
-          Lab
-        </Link>
-        <Link to="/stats" className="nav-btn" style={ghostStyle}>
-          Stats
-        </Link>
-      </div>
+      {!focus && (
+        <Nav>
+          <button className="tool-btn" onClick={() => setFocus(true)} title="Show only the clock">
+            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            Focus
+          </button>
+        </Nav>
+      )}
 
-      {/* Timer */}
-      <div className="timer-area">
-        {editingTime ? (
-          <div className="timer-input-row" style={{ color: fg }}>
-            <input
-              ref={minutesRef}
-              className="timer-input"
-              style={{ color: fg }}
-              value={inputMins}
-              onChange={e => setInputMins(e.target.value.replace(/\D/g, ''))}
-              onBlur={commitEdit}
-              onKeyDown={handleEditKeyDown}
-              maxLength={3}
-            />
-            <span className="timer-colon">:</span>
-            <input
-              className="timer-input"
-              style={{ color: fg }}
-              value={String(inputSecs).padStart(2, '0')}
-              onChange={e => {
-                let v = e.target.value.replace(/\D/g, '');
-                if (parseInt(v, 10) > 59) v = '59';
-                setInputSecs(v.slice(0, 2));
-              }}
-              onBlur={commitEdit}
-              onKeyDown={handleEditKeyDown}
-              maxLength={2}
-            />
-          </div>
-        ) : (
-          <div
-            className={`timer-time${isRunning ? ' locked' : ''}`}
-            style={{ color: fg }}
-            onClick={handleTimeClick}
-            title={isRunning ? 'Pause to edit' : 'Click to set time'}
-          >
-            {formatTime()}
-          </div>
-        )}
-      </div>
-
-      {/* Controls */}
-      <div className="timer-buttons">
-        <button className="timer-btn" style={ghostStyle} onClick={handleStart}>
-          {isRunning ? 'Pause' : 'Start'}
-        </button>
-        <button className="timer-btn" style={ghostStyle} onClick={handleReset}>
-          Reset
-        </button>
-      </div>
-
-      {/* Category bar */}
-      <div className="category-bar">
-        {categories.map(cat => {
-          const isActive = cat.name === category;
-          return (
-            <div key={cat.name} className="category-pill-wrap">
-              <button
-                className="category-pill"
-                style={isActive ? solidStyle : ghostStyle}
-                onClick={() => setCategory(cat.name)}
-              >
-                <span
-                  className="color-dot"
-                  style={{ background: cat.color }}
-                  onClick={e => {
-                    e.stopPropagation();
-                    setColorPickerFor(colorPickerFor === cat.name ? null : cat.name);
-                  }}
-                  title="Change color"
-                />
-                {cat.name}
-              </button>
-
-              {cat.name !== 'General' && (
+      <main className="home-main">
+        <section className="timer-col">
+          <div className="ring-wrap">
+            <svg className="ring" viewBox="0 0 320 320" aria-hidden="true">
+              <circle cx="160" cy="160" r="150" className="ring-track" />
+              <circle
+                cx="160" cy="160" r="150" className="ring-fill" transform="rotate(-90 160 160)"
+                style={{ stroke: catColor, strokeDasharray: RING, strokeDashoffset: RING * (1 - remaining) }}
+              />
+            </svg>
+            <div className="ring-inner">
+              {editingTime ? (
+                <div className="timer-input-row">
+                  <input
+                    ref={minutesRef}
+                    className="timer-input"
+                    aria-label="Minutes"
+                    value={inputMins}
+                    onChange={e => setInputMins(e.target.value.replace(/\D/g, ''))}
+                    onBlur={commitEdit}
+                    onKeyDown={handleEditKeyDown}
+                    maxLength={3}
+                  />
+                  <span className="timer-colon">:</span>
+                  <input
+                    className="timer-input"
+                    aria-label="Seconds"
+                    value={String(inputSecs).padStart(2, '0')}
+                    onChange={e => {
+                      let v = e.target.value.replace(/\D/g, '');
+                      if (parseInt(v, 10) > 59) v = '59';
+                      setInputSecs(v.slice(0, 2));
+                    }}
+                    onBlur={commitEdit}
+                    onKeyDown={handleEditKeyDown}
+                    maxLength={2}
+                  />
+                </div>
+              ) : (
                 <button
-                  className="pill-delete"
-                  style={solidStyle}
-                  onClick={() => handleDeleteCategory(cat.name)}
-                  title={`Delete ${cat.name}`}
+                  className={`timer-time${isRunning ? ' locked' : ''}`}
+                  onClick={handleTimeClick}
+                  title={isRunning ? 'Pause to change the time' : 'Click to set the time'}
                 >
-                  ×
+                  {formatTime()}
                 </button>
               )}
+              <div className="ring-cat"><span className="sq" style={{ background: catColor }} />{category}</div>
+            </div>
+          </div>
 
-              {colorPickerFor === cat.name && (
-                <div className="color-popover">
+          <div className="timer-buttons">
+            <button className="btn btn-primary btn-big" onClick={handleStart}>
+              {isRunning ? 'Pause' : 'Start'}
+            </button>
+            <button className="btn btn-ghost btn-big" onClick={handleReset}>Reset</button>
+          </div>
+
+          {focus ? (
+            <div className="focus-foot">
+              <span>{formatMinutes(todaySecs)} of {rules.dailyGoalMin} min today</span>
+              <button className="link-btn" onClick={() => setFocus(false)}>Leave focus (Esc)</button>
+            </div>
+          ) : (
+            <div className="category-bar">
+              {categories.map(cat => {
+                const isActive = cat.name === category;
+                return (
+                  <div key={cat.name} className="category-pill-wrap">
+                    <button
+                      className={`category-pill${isActive ? ' on' : ''}`}
+                      onClick={() => setCategory(cat.name)}
+                    >
+                      <span
+                        className="color-dot"
+                        style={{ background: cat.color }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setColorPickerFor(colorPickerFor === cat.name ? null : cat.name);
+                        }}
+                        title="Change color"
+                      />
+                      {cat.name}
+                    </button>
+
+                    {cat.name !== 'General' && (
+                      <button className="pill-delete" onClick={() => handleDeleteCategory(cat.name)} title={`Delete ${cat.name}`} aria-label={`Delete ${cat.name}`}>
+                        ×
+                      </button>
+                    )}
+
+                    {colorPickerFor === cat.name && (
+                      <div className="color-popover">
+                        <div className="color-swatches">
+                          {PRESET_COLORS.map(color => (
+                            <button
+                              key={color}
+                              aria-label={`Color ${color}`}
+                              className={`color-swatch${cat.color === color ? ' selected' : ''}`}
+                              style={{ background: color }}
+                              onClick={() => { handleSetColor(cat.name, color); setColorPickerFor(null); }}
+                            />
+                          ))}
+                        </div>
+                        <input type="color" aria-label="Custom color" value={cat.color} onChange={e => handleSetColor(cat.name, e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {addingCategory ? (
+                <div className="add-category-form">
+                  <input
+                    ref={newCatRef}
+                    className="category-input"
+                    aria-label="Category name"
+                    value={newCatName}
+                    onChange={e => setNewCatName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleAddCategory();
+                      else if (e.key === 'Escape') { setAddingCategory(false); setNewCatName(''); }
+                    }}
+                    placeholder="Name"
+                    maxLength={20}
+                  />
                   <div className="color-swatches">
                     {PRESET_COLORS.map(color => (
                       <button
                         key={color}
-                        className={`color-swatch${cat.color === color ? ' selected' : ''}`}
+                        aria-label={`Color ${color}`}
+                        className={`color-swatch${newCatColor === color ? ' selected' : ''}`}
                         style={{ background: color }}
-                        onClick={() => { handleSetColor(cat.name, color); setColorPickerFor(null); }}
+                        onClick={() => setNewCatColor(color)}
                       />
                     ))}
                   </div>
-                  <input
-                    type="color"
-                    value={cat.color}
-                    onChange={e => handleSetColor(cat.name, e.target.value)}
-                    style={{ width: '100%', height: 28, border: 'none', cursor: 'pointer', padding: 0, borderRadius: 4 }}
-                  />
+                  <button className="btn btn-primary" onClick={handleAddCategory}>Add</button>
+                  <button className="btn btn-ghost" aria-label="Cancel" onClick={() => { setAddingCategory(false); setNewCatName(''); }}>×</button>
                 </div>
+              ) : (
+                <button className="category-pill add-pill" onClick={() => setAddingCategory(true)} title="Add a category" aria-label="Add a category">
+                  +
+                </button>
               )}
             </div>
-          );
-        })}
+          )}
+        </section>
 
-        {addingCategory ? (
-          <div className="add-category-form">
-            <input
-              ref={newCatRef}
-              className="category-input"
-              style={ghostStyle}
-              value={newCatName}
-              onChange={e => setNewCatName(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleAddCategory();
-                else if (e.key === 'Escape') { setAddingCategory(false); setNewCatName(''); }
-              }}
-              placeholder="Name"
-              maxLength={20}
-            />
-            <div className="color-swatches" style={{ background: '#fff', padding: '6px 8px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
-              {PRESET_COLORS.map(color => (
-                <button
-                  key={color}
-                  className={`color-swatch${newCatColor === color ? ' selected' : ''}`}
-                  style={{ background: color }}
-                  onClick={() => setNewCatColor(color)}
-                />
-              ))}
+        {!focus && (
+          <aside className="side">
+            <div className="side-top">
+              <div className="stat-big">
+                <strong>{mySummary.streak}</strong>
+                <span>{mySummary.streak === 1 ? 'day in a row' : 'days in a row'}</span>
+              </div>
+              <div className="level">
+                <div className="level-head"><strong>Level {level.level}</strong><span>{level.toNext} XP to level {level.level + 1}</span></div>
+                <span className="bar" role="img" aria-label={`${level.into} of ${level.span} XP`}><span style={{ width: `${(level.into / level.span) * 100}%` }} /></span>
+              </div>
             </div>
-            <button className="timer-btn" style={{ ...solidStyle, padding: '6px 16px', fontSize: '0.85rem' }} onClick={handleAddCategory}>Add</button>
-            <button className="timer-btn" style={{ ...ghostStyle, padding: '6px 16px', fontSize: '0.85rem' }} onClick={() => { setAddingCategory(false); setNewCatName(''); }}>✕</button>
-          </div>
-        ) : (
-          <button
-            className="category-pill add-pill"
-            style={ghostStyle}
-            onClick={() => setAddingCategory(true)}
-            title="Add category"
-          >
-            +
-          </button>
-        )}
-      </div>
 
-      {/* Writing today */}
-      <Link to="/lab" className="today-line" style={{ color: fg }} title={joined ? 'See the lab' : 'Writing challenge'}>
-        <span className="today-track" style={{ background: `color-mix(in srgb, ${fg} 22%, transparent)` }}>
-          <span className="today-fill" style={{ width: `${Math.min(100, (todaySecs / goalSecs) * 100)}%`, background: fg }} />
-        </span>
-        <span>
-          {todayDone ? 'Writing done today' : 'Writing today'}: {formatMinutes(todaySecs)} of {rules.dailyGoalMin} min
-          {mySummary.streak > 0 && <span className="today-streak">{mySummary.streak}-day streak</span>}
-        </span>
-      </Link>
+            <section>
+              <h2>Today <span>{questsDone} of {todayQuests.length}</span></h2>
+              <ul className="quests">{todayQuests.map(q => <Quest key={q.id} q={q} />)}</ul>
+            </section>
+
+            <section>
+              <h2>This week</h2>
+              <ul className="quests">{weekQuests.map(q => <Quest key={q.id} q={q} />)}</ul>
+            </section>
+
+            <Link to="/lab" className="side-link">
+              {joined ? `See how ${labName ?? 'the lab'} is doing` : 'Do it with your lab'} →
+            </Link>
+          </aside>
+        )}
+      </main>
+
+      {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );
 }

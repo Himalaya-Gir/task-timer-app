@@ -7,16 +7,25 @@ with a writing challenge you can do alone or with your whole lab.
 
 **Timer.** Pick a category, set a duration, press Start. Each session is saved
 when the timer ends, when you reset it, or when you close the page. Time is
-never lost on a reload, a pause, or a crash.
+never lost on a reload, a pause, or a crash. **Focus** hides everything but the
+clock (Esc to leave).
+
+**Challenges.** Next to the timer: your streak, your level, three small
+challenges for today (one changes every day) and three for the week. Writing
+earns 1 XP a minute and 20 XP each day the goal is met.
+
+**Lab.** The writing challenge with everyone: the lab's goal for the week, who
+reached the goal today, this week's titles (longest streak, most written, most
+regular, biggest day), and the table of all members with their week, streak
+and level.
 
 **Stats.** A chart of each week by category, with arrows to look at earlier
-weeks. Weekly goals. The list of your sessions, where you can delete one or
-add time by hand when you forgot to start the timer. A CSV download.
+weeks. Your badges. Weekly goals. The list of your sessions, where you can
+delete one or add time by hand when you forgot to start the timer. A CSV
+download.
 
-**Lab.** The writing challenge. The goal is a number of minutes of writing a
-day (30 by default, weekdays only). You see your week, your streak of days in
-a row, and your totals. Once your lab is connected, everyone sees the same
-table for the whole lab.
+**Day and night.** The button at the top right switches between day, night,
+and following your computer.
 
 Only sessions in the **Writing** category count for the challenge, and only
 those are shared with the lab. Everything else stays in your browser.
@@ -77,6 +86,7 @@ The table starts counting on the lab's start day.
 ## How it is built
 
 React and Vite. `src/challenge.js` holds the rules of the challenge (days,
-goal, streaks) as plain functions, tested in `src/challenge.test.js`.
+goal, streaks) and `src/game.js` the game on top (XP, levels, challenges,
+badges, titles), all as plain tested functions.
 `src/labApi.js` is the only file that talks to Supabase, and is loaded only
 when a lab is connected.

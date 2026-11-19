@@ -2,8 +2,8 @@
 import { addDays, isWeekend } from './challenge';
 
 const PEOPLE = [
-  ['Ada', 0.95, 48], ['Noam', 0.8, 35], ['Rosalind', 0.9, 62],
-  ['Alan', 0.55, 30], ['Grace', 0.7, 41], ['Santiago', 0.35, 25],
+  ['Ada', 0.95, 48], ['Noam', 0.8, 80], ['Rosalind', 0.9, 62],
+  ['Alan', 0.55, 30], ['Grace', 0.9, 31], ['Santiago', 0.35, 25],
 ];
 
 // Small deterministic generator: the demo looks the same on every visit.

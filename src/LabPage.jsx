@@ -1,28 +1,28 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useCategories, useLab } from './AppContext';
-import { getContrastColor } from './utils';
+import Nav from './Nav';
+import { useLab } from './AppContext';
 import { DEFAULT_RULES, formatMinutes, memberSummary } from './challenge';
+import { labTitles, levelOf, teamGoal, xpOf } from './game';
 import { demoBoard } from './demoBoard';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const SORTS = [
   { key: 'streak', label: 'Streak' },
   { key: 'weekSecs', label: 'This week' },
-  { key: 'totalSecs', label: 'Total' },
+  { key: 'xp', label: 'Level' },
 ];
 
-function WeekDots({ week, goalSecs }) {
+function WeekMarks({ week, goalSecs }) {
   return (
-    <div className="week-dots">
+    <div className="marks">
       {week.map((d, i) => {
-        const part = Math.min(1, d.secs / goalSecs);
-        const cls = d.met ? 'met' : d.future ? 'future' : d.secs > 0 ? 'part' : d.optional ? 'optional' : 'missed';
+        const cls = d.met ? 'met' : d.future ? 'future' : d.secs > 0 ? 'part' : d.optional ? 'future' : 'missed';
         return (
           <span
             key={d.day}
-            className={`week-dot ${cls}`}
-            style={cls === 'part' ? { '--part': `${Math.round(part * 100)}%` } : undefined}
+            className={`mark ${cls}`}
+            style={cls === 'part' ? { '--part': `${Math.round(Math.min(1, d.secs / goalSecs) * 100)}%` } : undefined}
             title={`${d.day}: ${formatMinutes(d.secs)}`}
           >
             {DAY_LETTERS[i]}
@@ -66,15 +66,10 @@ function JoinForm() {
 }
 
 export default function LabPage() {
-  const { getCategoryColor, activeCategory } = useCategories();
   const lab = useLab();
   const [params] = useSearchParams();
   const demo = params.has('demo');
   const [sortKey, setSortKey] = useState('weekSecs');
-
-  const bgColor = getCategoryColor(activeCategory);
-  const fg = getContrastColor(bgColor);
-  const navStyle = { borderColor: fg, color: fg };
 
   const rules = demo ? DEFAULT_RULES : lab.rules;
   const goalSecs = rules.dailyGoalMin * 60;
@@ -91,14 +86,18 @@ export default function LabPage() {
         const me = m.id === source.myId;
         // My own row uses what is on this device, so it updates at once.
         const totals = me && !demo ? lab.myTotals : m.totals;
-        return { id: m.id, name: m.name, me, ...memberSummary(totals, lab.today, rules) };
+        const summary = memberSummary(totals, lab.today, rules);
+        const xp = xpOf(summary);
+        return { id: m.id, name: m.name, me, xp, level: levelOf(xp).level, ...summary };
       })
-      .sort((a, b) => b[sortKey] - a[sortKey] || b.totalSecs - a.totalSecs || a.name.localeCompare(b.name));
+      .sort((a, b) => b[sortKey] - a[sortKey] || b.xp - a.xp || a.name.localeCompare(b.name));
   }, [demo, lab.joined, lab.board, lab.myTotals, lab.profile, lab.today, rules, sortKey]);
 
   const wroteToday = rows.filter(r => r.todayMet).length;
-  const labWeek = rows.reduce((a, r) => a + r.weekSecs, 0);
-  const title = demo ? 'Sample lab' : lab.joined ? (lab.labName ?? 'Lab') : 'Writing challenge';
+  const team = teamGoal(rows, rules);
+  const titles = useMemo(() => labTitles(rows), [rows]);
+  const titlesOf = (id) => titles.filter(t => t.memberId === id);
+  const heading = demo ? 'Sample lab' : lab.joined ? (lab.labName ?? 'Lab') : 'Writing challenge';
 
   const leave = async () => {
     if (!window.confirm('Leave the lab? Your shared writing time is removed for everyone. It stays on this device.')) return;
@@ -106,60 +105,74 @@ export default function LabPage() {
   };
 
   return (
-    <div className="stats-page" style={{ background: bgColor }}>
-      <div className="stats-nav">
-        <Link to="/stats" className="nav-btn" style={navStyle}>Stats</Link>
-        <Link to="/" className="nav-btn" style={navStyle}>Timer</Link>
-      </div>
+    <div className="app">
+      <Nav />
+      <main className="page">
+        <div className="page-head">
+          <h1>{heading}</h1>
+          <p>
+            {rules.dailyGoalMin} minutes of writing, {rules.weekdaysOnly ? 'every weekday' : 'every day'}.
+            {rules.weekdaysOnly && ' Weekends are a bonus and never break a streak.'}
+          </p>
+        </div>
 
-      <div className="stats-card">
-        <h2>{title}</h2>
-        <p className="lab-rule">
-          Goal: <strong>{rules.dailyGoalMin} minutes of writing</strong> {rules.weekdaysOnly ? 'every weekday' : 'every day'}.
-          {rules.weekdaysOnly && ' Weekends are a bonus: they never break a streak.'}
-        </p>
-
-        {demo && <p className="lab-note">This is made-up data, to show what the page looks like once a lab has joined.</p>}
+        {demo && <p className="note">This is made-up data, to show the page once a lab has joined. <Link to="/lab">Back to my challenge</Link></p>}
 
         {showBoard && (
-          <div className="lab-figures">
-            <div><strong>{wroteToday} of {rows.length}</strong><span>reached the goal today</span></div>
-            <div><strong>{formatMinutes(labWeek)}</strong><span>written by the lab this week</span></div>
-          </div>
+          <section className="figures">
+            <div className="figure wide">
+              <div className="figure-head"><span>Lab goal this week</span><strong>{formatMinutes(team.done)} of {formatMinutes(team.target)}</strong></div>
+              <span className="bar big" role="img" aria-label={`${Math.round(team.progress * 100)} percent`}><span style={{ width: `${team.progress * 100}%` }} /></span>
+            </div>
+            <div className="figure">
+              <strong>{wroteToday} of {rows.length}</strong>
+              <span>reached the goal today</span>
+            </div>
+          </section>
         )}
 
-        {lab.joined && !demo && !lab.board && lab.status.state !== 'error' && (
-          <p className="lab-note">Loading the lab.</p>
+        {titles.length > 0 && (
+          <section className="titles" aria-label="This week's titles">
+            {titles.map(t => (
+              <div key={t.id} className="title-card">
+                <span>{t.title}</span>
+                <strong>{t.name}</strong>
+                <em>{t.value}</em>
+              </div>
+            ))}
+          </section>
         )}
 
-        <div className="board" role="table">
+        {lab.joined && !demo && !lab.board && lab.status.state !== 'error' && <p className="note">Loading the lab.</p>}
+
+        <section className="board" role="table">
           <div className="board-row board-head" role="row">
             <span role="columnheader">Name</span>
             <span role="columnheader">Week</span>
             <span role="columnheader" className="num">Today</span>
             {SORTS.map(s => (
-              <button
-                key={s.key}
-                role="columnheader"
-                className={`num sort-btn${sortKey === s.key ? ' on' : ''}${s.key === 'totalSecs' ? ' wide-only' : ''}`}
-                onClick={() => setSortKey(s.key)}
-                title={`Sort by ${s.label.toLowerCase()}`}
-              >
+              <button key={s.key} role="columnheader" className={`num sort-btn${sortKey === s.key ? ' on' : ''}`} onClick={() => setSortKey(s.key)} title={`Sort by ${s.label.toLowerCase()}`}>
                 {s.label}
               </button>
             ))}
           </div>
-          {rows.map(r => (
-            <div key={r.id} className={`board-row${r.me ? ' me' : ''}`} role="row">
-              <span className="board-name" role="cell">{r.name}{r.me && showBoard && <em>you</em>}</span>
-              <span role="cell" className="board-week"><WeekDots week={r.week} goalSecs={goalSecs} /></span>
+          {rows.map((r, i) => (
+            <div key={r.id} className={`board-row${r.me && showBoard ? ' me' : ''}`} role="row">
+              <span className="board-name" role="cell">
+                {showBoard && <span className="rank">{i + 1}</span>}
+                <span className="who">
+                  {r.name}{r.me && showBoard && <em>you</em>}
+                  {titlesOf(r.id).length > 0 && <span className="tags">{titlesOf(r.id).map(t => <span key={t.id} className="tag">{t.title}</span>)}</span>}
+                </span>
+              </span>
+              <span role="cell" className="board-week"><WeekMarks week={r.week} goalSecs={goalSecs} /></span>
               <span className={`num${r.todayMet ? ' done' : ''}`} role="cell" data-label="Today">{formatMinutes(r.todaySecs)}</span>
               <span className="num" role="cell" data-label="Streak">{r.streak} {r.streak === 1 ? 'day' : 'days'}</span>
               <span className="num" role="cell" data-label="Week">{formatMinutes(r.weekSecs)}</span>
-              <span className="num wide-only" role="cell">{formatMinutes(r.totalSecs)}</span>
+              <span className="num" role="cell" data-label="Level">{r.level}</span>
             </div>
           ))}
-        </div>
+        </section>
 
         {!demo && lab.status.state === 'error' && (
           <p className="form-error">
@@ -167,31 +180,27 @@ export default function LabPage() {
             <button className="link-btn" onClick={lab.sync}>Try again</button>
           </p>
         )}
-      </div>
 
-      {!demo && !lab.joined && (
-        <div className="stats-card">
-          <h3>Do it with your lab</h3>
-          {lab.configured ? <JoinForm /> : (
-            <p className="lab-note">
-              This copy of the app is not connected to a lab yet, so the challenge is only for you.
-              The README explains how to connect one in about ten minutes.
-            </p>
-          )}
-          <p className="lab-note"><Link to="/lab?demo">See a sample lab</Link></p>
-        </div>
-      )}
+        {!demo && !lab.joined && (
+          <section className="card">
+            <h2>Do it with your lab</h2>
+            {lab.configured ? <JoinForm /> : (
+              <p className="note">
+                This copy of the app is not connected to a lab yet, so the challenge is only for you.
+                The README explains how to connect one in about ten minutes.
+              </p>
+            )}
+            <p className="note"><Link to="/lab?demo">See a sample lab</Link></p>
+          </section>
+        )}
 
-      {demo && (
-        <p className="lab-foot" style={{ color: fg }}><Link to="/lab" style={{ color: fg }}>Back to my challenge</Link></p>
-      )}
-
-      {!demo && lab.joined && (
-        <p className="lab-foot" style={{ color: fg }}>
-          Shared as {lab.profile.name}. Only the Writing category is shared.{' '}
-          <button className="link-btn" style={{ color: fg }} onClick={leave}>Leave the lab</button>
-        </p>
-      )}
+        {!demo && lab.joined && (
+          <p className="foot">
+            Shared as {lab.profile.name}. Only the Writing category is shared.{' '}
+            <button className="link-btn" onClick={leave}>Leave the lab</button>
+          </p>
+        )}
+      </main>
     </div>
   );
 }

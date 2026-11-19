@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { useCategories, useSessions } from './AppContext';
+import Nav from './Nav';
+import { useCategories, useSessions, useLab } from './AppContext';
 import { getContrastColor } from './utils';
+import { badges } from './game';
 import { dayKey, formatMinutes } from './challenge';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -28,13 +30,16 @@ const goalModeLabel = (goal) => {
 };
 
 export default function StatsPage() {
-  const { categories, getCategoryColor, activeCategory } = useCategories();
+  const { categories, getCategoryColor } = useCategories();
+  const lab = useLab();
   const { sessions, addSession, deleteSession } = useSessions();
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = last week
 
-  const bgColor = getCategoryColor(activeCategory);
-  const fg = getContrastColor(bgColor);
-  const navStyle = { borderColor: fg, color: fg };
+  const myBadges = useMemo(
+    () => badges(sessions, lab.myTotals, lab.today, lab.rules),
+    [sessions, lab.myTotals, lab.today, lab.rules]
+  );
+  const earned = myBadges.filter(b => b.earned).length;
 
   // ── Current week sessions ─────────────────────────────────────────────
   const weekSessions = useMemo(() => {
@@ -199,22 +204,13 @@ export default function StatsPage() {
   };
 
   return (
-    <div className="stats-page" style={{ background: bgColor }}>
-      {/* Nav */}
-      <div className="stats-nav">
-        <button className="nav-btn" style={navStyle} onClick={downloadCSV}>
-          Download
-        </button>
-        <Link to="/lab" className="nav-btn" style={navStyle}>
-          Lab
-        </Link>
-        <Link to="/" className="nav-btn" style={navStyle}>
-          Timer
-        </Link>
-      </div>
-
+    <div className="app">
+      <Nav>
+        <button className="tool-btn" onClick={downloadCSV} title="Download all sessions as a CSV file">Download</button>
+      </Nav>
+      <main className="page">
       {/* Chart card */}
-      <div className="stats-card">
+      <div className="card">
         <div className="week-head">
           <h2>{weekTitle}</h2>
           <div className="week-nav">
@@ -238,8 +234,8 @@ export default function StatsPage() {
                 const y = yBottom - h * pxPerHour;
                 return (
                   <g key={h}>
-                    <text x={30} y={y + 4} fontSize={13} fill="#aaa" textAnchor="end">{h}</text>
-                    <line x1={40} x2={680} y1={y} y2={y} stroke="#f0f0f0" strokeWidth={1.5} />
+                    <text x={30} y={y + 4} fontSize={13} className="chart-text" textAnchor="end">{h}</text>
+                    <line x1={40} x2={680} y1={y} y2={y} className="chart-line" strokeWidth={1.5} />
                   </g>
                 );
               })}
@@ -250,11 +246,11 @@ export default function StatsPage() {
                 const isToday = weekOffset === 0 && i === new Date().getDay();
                 return (
                   <g key={d}>
-                    <line x1={x} x2={x} y1={Y_BASE} y2={yBottom} stroke="#f0f0f0" strokeWidth={1} />
-                    <text x={x} y={svgHeight - 6} fontSize={13} fill={isToday ? '#1976d2' : '#aaa'} textAnchor="middle" fontWeight={isToday ? '700' : '400'}>
+                    <line x1={x} x2={x} y1={Y_BASE} y2={yBottom} className="chart-line" strokeWidth={1} />
+                    <text x={x} y={svgHeight - 6} fontSize={13} className={isToday ? 'chart-today' : 'chart-text'} textAnchor="middle" fontWeight={isToday ? '700' : '400'}>
                       {d}
                     </text>
-                    {isToday && <circle cx={x} cy={svgHeight - 22} r={3} fill="#1976d2" />}
+                    {isToday && <rect x={x - 3} y={svgHeight - 26} width={6} height={6} className="chart-today" />}
                   </g>
                 );
               })}
@@ -270,7 +266,7 @@ export default function StatsPage() {
                   const barH = (secs / 3600) * pxPerHour;
                   yAcc -= barH;
                   const rect = (
-                    <rect key={cat + dayIdx} x={x - 20} y={yAcc} width={40} height={barH} fill={getCategoryColor(cat)} rx={6} opacity={0.92}>
+                    <rect key={cat + dayIdx} x={x - 20} y={yAcc} width={40} height={barH} fill={getCategoryColor(cat)} rx={3}>
                       <title>{cat}: {(secs / 3600).toFixed(2)}h</title>
                     </rect>
                   );
@@ -293,8 +289,22 @@ export default function StatsPage() {
         )}
       </div>
 
+      {/* Badges */}
+      <div className="card">
+        <h3>Badges <span>{earned} of {myBadges.length}</span></h3>
+        <div className="badges">
+          {myBadges.map(b => (
+            <div key={b.id} className={`badge${b.earned ? ' earned' : ''}`} title={b.how}>
+              <span className="badge-mark" aria-hidden="true">{b.mark}</span>
+              <strong>{b.name}</strong>
+              <span>{b.how}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Sessions card */}
-      <div className="stats-card">
+      <div className="card">
         <h3>Sessions</h3>
         <form className="goal-form entry-form" onSubmit={handleAddEntry}>
           <label htmlFor="entry-mins">Forgot the timer? Add</label>
@@ -326,7 +336,7 @@ export default function StatsPage() {
       </div>
 
       {/* Goals card */}
-      <div className="stats-card">
+      <div className="card">
         <h3>Weekly Goals</h3>
 
         {!showGoalForm ? (
@@ -386,8 +396,8 @@ export default function StatsPage() {
           {goals.length === 0 && <p className="empty-state">No goals set for this week.</p>}
           {goals.map((goal, idx) => {
             const progress = getGoalProgress(goal);
-            const catColor = goal.category !== 'Any' ? getCategoryColor(goal.category) : '#1976d2';
-            const barColor = progress.percent >= 1 ? '#388e3c' : catColor;
+            const catColor = goal.category !== 'Any' ? getCategoryColor(goal.category) : 'var(--accent)';
+            const barColor = catColor;
             const daysTotal = goalDays(goal).length;
             return (
               <div key={idx} className="goal-item">
@@ -397,7 +407,7 @@ export default function StatsPage() {
                   {goal.category === 'Any' ? 'all categories' : (
                     <span
                       className="cat-pill-inline"
-                      style={{ background: catColor, color: getContrastColor(catColor) }}
+                      style={{ background: getCategoryColor(goal.category), color: getContrastColor(getCategoryColor(goal.category)) }}
                     >
                       {goal.category}
                     </span>
@@ -416,6 +426,7 @@ export default function StatsPage() {
           })}
         </div>
       </div>
+      </main>
     </div>
   );
 }
