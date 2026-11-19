@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { useCategories, useSessions } from './AppContext';
-import { getContrastColor } from './utils';
+import { useCategories, useSessions, useLab } from './AppContext';
+import { getContrastColor, makeSession } from './utils';
+import { formatMinutes, isWriting } from './challenge';
 import chimeSound from './assets/chime-sound-7143.mp3';
 
 const PRESET_COLORS = ['#1976d2', '#388e3c', '#d32f2f', '#7b1fa2', '#e65100', '#0097a7'];
+
+// A timer that reached zero while the page was gone (crash, phone closing the
+// tab) is logged once on the next visit instead of being lost.
+let recoveredOnce = false;
 
 function getSavedTimer() {
   try { return JSON.parse(localStorage.getItem('timerState')) || {}; }
@@ -14,6 +19,7 @@ function getSavedTimer() {
 export default function HomePage() {
   const { categories, setCategories, getCategoryColor, activeCategory: category, setActiveCategory: setCategory } = useCategories();
   const { addSession } = useSessions();
+  const { mySummary, rules, joined } = useLab();
 
   // ── Timer state ──────────────────────────────────────────────────────
   const saved = getSavedTimer();
@@ -32,8 +38,24 @@ export default function HomePage() {
   const [sessionStart, setSessionStart] = useState(saved.sessionStart ?? null);
 
   // ── Work-time accumulator (excludes paused time) ─────────────────────
-  const accumulatedSecsRef = useRef(0);
-  const resumeTimeRef = useRef(savedStillRunning ? Date.now() : null);
+  // Both are saved with the timer so a reload never loses time already worked.
+  const accumulatedSecsRef = useRef(saved.sessionStart ? (saved.accumulated ?? 0) : 0);
+  const resumeTimeRef = useRef(savedStillRunning ? (saved.resumeTime ?? Date.now()) : null);
+
+  useEffect(() => {
+    if (recoveredOnce) return;
+    recoveredOnce = true;
+    if (!saved.isRunning || !saved.sessionStart || !savedEndTime || savedStillRunning) return;
+    const worked = Math.round(
+      (saved.accumulated ?? 0) + (savedEndTime - (saved.resumeTime ?? saved.sessionStart)) / 1000
+    );
+    if (worked > 0) {
+      addSession({ start: saved.sessionStart, end: savedEndTime, duration: worked, category, endType: 'complete' });
+    }
+    accumulatedSecsRef.current = 0;
+    setSessionStart(null);
+    setTime(saved.lastSetTime ?? 30 * 60);
+  }, []);
 
   // ── Timer editing ────────────────────────────────────────────────────
   const [editingTime, setEditingTime] = useState(false);
@@ -64,14 +86,7 @@ export default function HomePage() {
       (isRunning && resumeTimeRef.current ? (Date.now() - resumeTimeRef.current) / 1000 : 0)
     );
     if (workedSecs <= 0) { setSessionStart(null); return; }
-    addSession({
-      start: sessionStart,
-      end: Date.now(),
-      duration: workedSecs,
-      dayOfWeek: new Date(sessionStart).getDay(),
-      category,
-      endType,
-    });
+    addSession({ start: sessionStart, end: Date.now(), duration: workedSecs, category, endType });
     accumulatedSecsRef.current = 0;
     resumeTimeRef.current = null;
     setSessionStart(null);
@@ -79,7 +94,11 @@ export default function HomePage() {
 
   // ── Persist timer state (including running state for tab-title continuity) ─
   useEffect(() => {
-    localStorage.setItem('timerState', JSON.stringify({ time, lastSetTime, isRunning, endTime, sessionStart }));
+    localStorage.setItem('timerState', JSON.stringify({
+      time, lastSetTime, isRunning, endTime, sessionStart,
+      accumulated: accumulatedSecsRef.current,
+      resumeTime: resumeTimeRef.current,
+    }));
   }, [time, lastSetTime, isRunning, endTime, sessionStart]);
 
   // ── Page title ────────────────────────────────────────────────────────
@@ -149,14 +168,9 @@ export default function HomePage() {
     if (workedSecs > 0) {
       try {
         const sessions = JSON.parse(localStorage.getItem('sessions')) || [];
-        sessions.push({
-          start: sessionStart,
-          end: Date.now(),
-          duration: workedSecs,
-          dayOfWeek: new Date(sessionStart).getDay(),
-          category,
-          endType: 'close',
-        });
+        sessions.push(makeSession({
+          start: sessionStart, end: Date.now(), duration: workedSecs, category, endType: 'close',
+        }));
         localStorage.setItem('sessions', JSON.stringify(sessions));
       } catch {}
     }
@@ -169,6 +183,8 @@ export default function HomePage() {
         isRunning: false,
         endTime: null,
         sessionStart: null,
+        accumulated: 0,
+        resumeTime: null,
       }));
     } catch {}
   };
@@ -313,6 +329,14 @@ export default function HomePage() {
   const ghostStyle = { borderColor: fg, color: fg };
   const solidStyle = { background: fg, borderColor: fg, color: bgColor };
 
+  // Writing done today, including the session in progress.
+  const liveSecs = sessionStart && isWriting(category)
+    ? accumulatedSecsRef.current + (isRunning && resumeTimeRef.current ? (Date.now() - resumeTimeRef.current) / 1000 : 0)
+    : 0;
+  const todaySecs = mySummary.todaySecs + liveSecs;
+  const goalSecs = rules.dailyGoalMin * 60;
+  const todayDone = todaySecs >= goalSecs;
+
   const formatTime = () => {
     const m = Math.floor(time / 60);
     const s = (time % 60).toString().padStart(2, '0');
@@ -325,6 +349,9 @@ export default function HomePage() {
 
       {/* Nav */}
       <div className="timer-nav">
+        <Link to="/lab" className="nav-btn" style={ghostStyle}>
+          Lab
+        </Link>
         <Link to="/stats" className="nav-btn" style={ghostStyle}>
           Stats
         </Link>
@@ -478,6 +505,17 @@ export default function HomePage() {
           </button>
         )}
       </div>
+
+      {/* Writing today */}
+      <Link to="/lab" className="today-line" style={{ color: fg }} title={joined ? 'See the lab' : 'Writing challenge'}>
+        <span className="today-track" style={{ background: `color-mix(in srgb, ${fg} 22%, transparent)` }}>
+          <span className="today-fill" style={{ width: `${Math.min(100, (todaySecs / goalSecs) * 100)}%`, background: fg }} />
+        </span>
+        <span>
+          {todayDone ? 'Writing done today' : 'Writing today'}: {formatMinutes(todaySecs)} of {rules.dailyGoalMin} min
+          {mySummary.streak > 0 && <span className="today-streak">{mySummary.streak}-day streak</span>}
+        </span>
+      </Link>
     </div>
   );
 }

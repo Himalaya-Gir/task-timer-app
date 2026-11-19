@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useCategories, useSessions } from './AppContext';
 import { getContrastColor } from './utils';
+import { dayKey, formatMinutes } from './challenge';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DAY_ABBR = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -28,7 +29,8 @@ const goalModeLabel = (goal) => {
 
 export default function StatsPage() {
   const { categories, getCategoryColor, activeCategory } = useCategories();
-  const { sessions } = useSessions();
+  const { sessions, addSession, deleteSession } = useSessions();
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = last week
 
   const bgColor = getCategoryColor(activeCategory);
   const fg = getContrastColor(bgColor);
@@ -39,14 +41,54 @@ export default function StatsPage() {
     const now = new Date();
     const startOfWeek = new Date(now);
     startOfWeek.setHours(0, 0, 0, 0);
-    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setDate(now.getDate() - now.getDay() - 7 * weekOffset);
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
     return sessions.filter(s => {
       const d = new Date(s.start);
       return d >= startOfWeek && d < endOfWeek;
     });
-  }, [sessions]);
+  }, [sessions, weekOffset]);
+
+  const weekTitle = useMemo(() => {
+    if (weekOffset === 0) return 'This Week';
+    if (weekOffset === 1) return 'Last Week';
+    const start = new Date();
+    start.setDate(start.getDate() - start.getDay() - 7 * weekOffset);
+    return `Week of ${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  }, [weekOffset]);
+
+  const hasOlder = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - start.getDay() - 7 * weekOffset);
+    return sessions.some(s => s.start < start.getTime());
+  }, [sessions, weekOffset]);
+
+  // ── Add time by hand (forgot to start the timer) ──────────────────────
+  const [entryDay, setEntryDay] = useState(() => dayKey(Date.now()));
+  const [entryMins, setEntryMins] = useState('');
+  const [entryCat, setEntryCat] = useState(() =>
+    categories.find(c => c.name.toLowerCase() === 'writing')?.name ?? categories[0]?.name ?? 'General'
+  );
+
+  const handleAddEntry = (e) => {
+    e.preventDefault();
+    const mins = Number(entryMins);
+    if (!entryDay || !(mins > 0)) return;
+    const today = dayKey(Date.now());
+    if (entryDay > today) return;
+    const duration = Math.round(mins * 60);
+    // Today: ends now (but never starts before midnight). Another day: at noon.
+    const midnight = new Date(`${entryDay}T00:00:00`).getTime();
+    const start = entryDay === today
+      ? Math.max(midnight, Date.now() - duration * 1000)
+      : midnight + 12 * 3600 * 1000;
+    addSession({ start, end: start + duration * 1000, duration, category: entryCat, endType: 'manual' });
+    setEntryMins('');
+  };
+
+  const weekList = useMemo(() => [...weekSessions].sort((a, b) => b.start - a.start), [weekSessions]);
 
   // grid[dayIndex][categoryName] = total seconds
   const gridData = useMemo(() => {
@@ -163,6 +205,9 @@ export default function StatsPage() {
         <button className="nav-btn" style={navStyle} onClick={downloadCSV}>
           Download
         </button>
+        <Link to="/lab" className="nav-btn" style={navStyle}>
+          Lab
+        </Link>
         <Link to="/" className="nav-btn" style={navStyle}>
           Timer
         </Link>
@@ -170,10 +215,18 @@ export default function StatsPage() {
 
       {/* Chart card */}
       <div className="stats-card">
-        <h2>This Week</h2>
+        <div className="week-head">
+          <h2>{weekTitle}</h2>
+          <div className="week-nav">
+            <button className="btn btn-ghost" onClick={() => setWeekOffset(o => o + 1)} disabled={!hasOlder} aria-label="Previous week" title="Previous week">←</button>
+            <button className="btn btn-ghost" onClick={() => setWeekOffset(o => Math.max(0, o - 1))} disabled={weekOffset === 0} aria-label="Next week" title="Next week">→</button>
+          </div>
+        </div>
 
         {weekSessions.length === 0 ? (
-          <p className="empty-chart">No sessions recorded this week. Start the timer to log time!</p>
+          <p className="empty-chart">
+            {weekOffset === 0 ? 'No sessions recorded this week. Start the timer to log time!' : 'No sessions recorded that week.'}
+          </p>
         ) : (
           <>
             <svg
@@ -194,7 +247,7 @@ export default function StatsPage() {
               {/* Vertical grid + day labels */}
               {DAYS.map((d, i) => {
                 const x = 80 + i * 86;
-                const isToday = i === new Date().getDay();
+                const isToday = weekOffset === 0 && i === new Date().getDay();
                 return (
                   <g key={d}>
                     <line x1={x} x2={x} y1={Y_BASE} y2={yBottom} stroke="#f0f0f0" strokeWidth={1} />
@@ -238,6 +291,38 @@ export default function StatsPage() {
             )}
           </>
         )}
+      </div>
+
+      {/* Sessions card */}
+      <div className="stats-card">
+        <h3>Sessions</h3>
+        <form className="goal-form entry-form" onSubmit={handleAddEntry}>
+          <label htmlFor="entry-mins">Forgot the timer? Add</label>
+          <input id="entry-mins" type="number" min="1" max="720" step="1" value={entryMins} onChange={e => setEntryMins(e.target.value)} placeholder="min" required />
+          <label htmlFor="entry-cat">minutes of</label>
+          <select id="entry-cat" value={entryCat} onChange={e => setEntryCat(e.target.value)}>
+            {categories.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+          </select>
+          <label htmlFor="entry-day">on</label>
+          <input id="entry-day" type="date" value={entryDay} max={dayKey(Date.now())} onChange={e => setEntryDay(e.target.value)} required />
+          <button type="submit" className="btn btn-primary">Add</button>
+        </form>
+
+        <div className="session-list">
+          {weekList.length === 0 && <p className="empty-state">Nothing here yet.</p>}
+          {weekList.map(s => (
+            <div key={s.id} className="session-row">
+              <span className="legend-swatch" style={{ background: getCategoryColor(s.category) }} />
+              <span className="session-when">
+                {new Date(s.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                {s.endType !== 'manual' && `, ${new Date(s.start).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}
+              </span>
+              <span className="session-cat">{s.category}{s.endType === 'manual' && <em>added by hand</em>}</span>
+              <span className="session-dur">{s.duration < 60 ? `${s.duration} s` : formatMinutes(s.duration)}</span>
+              <button className="session-remove" onClick={() => deleteSession(s.id)} title="Delete this session" aria-label="Delete this session">×</button>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Goals card */}
